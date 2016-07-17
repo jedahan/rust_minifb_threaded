@@ -18,15 +18,16 @@ fn main() {
             .unwrap();
 
         while window.is_open() && !window.is_key_down(Key::Escape) {
+            let color = (frames % 255) as u32;
             for i in buffer.iter_mut() {
-                *i = (frames % 255) as u32; // write something more funny here!
+                *i = color;
             }
 
             window.update_with_buffer(&buffer);
 
             sleep(Duration::from_millis(16));
 
-            window.set_title(format!("Hello from screen {} (frames/60)", frames / 60).as_str());
+            window.set_title(format!("Screen is color {}", color).as_str());
             frames = frames + 1;
         }
     });
