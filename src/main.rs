@@ -14,19 +14,20 @@ fn main() {
     let mut frames: usize = 0;
 
     thread::spawn(move || {
-        let mut window = minifb::Window::new("debug", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
+        let mut window = minifb::Window::new("debug", WIDTH, HEIGHT, WindowOptions::default())
+            .unwrap();
 
         while window.is_open() && !window.is_key_down(Key::Escape) {
-
             for i in buffer.iter_mut() {
-                *i = 70; // write something more funny here!
+                *i = (frames % 255) as u32; // write something more funny here!
             }
 
             window.update_with_buffer(&buffer);
+
             sleep(Duration::from_millis(16));
+
+            window.set_title(format!("Hello from screen {} (frames/60)", frames / 60).as_str());
             frames = frames + 1;
-            let framecount = format!("Hello from screen {} (frames/60)", frames/60);
-            window.set_title(framecount.as_str());
         }
     });
 
