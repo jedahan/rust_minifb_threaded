@@ -14,8 +14,7 @@ fn main() {
     let mut frames: usize = 0;
 
     thread::spawn(move || {
-        let mut window = minifb::Window::new("debug", WIDTH, HEIGHT, WindowOptions::default())
-            .unwrap();
+        let mut window = minifb::Window::new("debug", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
 
         while window.is_open() && !window.is_key_down(Key::Escape) {
             let color = (frames % 255) as u32;
@@ -24,16 +23,15 @@ fn main() {
             }
 
             window.update_with_buffer(&buffer);
-
-            sleep(Duration::from_millis(16));
-
             window.set_title(format!("Screen is color {}", color).as_str());
             frames = frames + 1;
+
+            sleep(Duration::from_millis(16));
         }
     });
 
     loop {
-        println!("hi from the main thread");
-        sleep(Duration::from_millis(16000));
+        println!("Hi from the main thread");
+        sleep(Duration::from_millis(10000));
     }
 }
