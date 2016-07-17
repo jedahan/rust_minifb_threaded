@@ -4,35 +4,31 @@ use std::thread;
 use std::time::Duration;
 use std::thread::sleep;
 
-use minifb::{Key, WindowOptions};
+use minifb::WindowOptions;
 
 const WIDTH: usize = 288;
 const HEIGHT: usize = 160;
 
 fn main() {
     let mut buffer = vec![0; WIDTH * HEIGHT];
-    let mut frames: usize = 0;
+    let mut frames: u32 = 0;
 
-    let handle = thread::spawn(move || {
+    let _ = thread::spawn(move || {
+        println!("Hello from child thread");
         let mut window = minifb::Window::new("debug", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
+        println!("Hello from after window creation in the child thread");
 
-        while window.is_open() && !window.is_key_down(Key::Escape) {
-            let color = (frames % 255) as u32;
+        while frames < 0xFF {
+            println!("Hello from frame {}", frames);
             for i in buffer.iter_mut() {
-                *i = color;
+                *i = frames;
             }
-
             window.update_with_buffer(&buffer);
-            window.set_title(format!("Screen is color {}", color).as_str());
             frames = frames + 1;
 
             sleep(Duration::from_millis(16));
         }
-
-        "Thread has ended"
     });
-
-    println!("{}", handle.join().unwrap());
 
     loop {
         println!("Hi from the main thread");
