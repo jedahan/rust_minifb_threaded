@@ -13,7 +13,7 @@ fn main() {
     let mut buffer = vec![0; WIDTH * HEIGHT];
     let mut frames: usize = 0;
 
-    thread::spawn(move || {
+    let handle = thread::spawn(move || {
         let mut window = minifb::Window::new("debug", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
 
         while window.is_open() && !window.is_key_down(Key::Escape) {
@@ -28,7 +28,11 @@ fn main() {
 
             sleep(Duration::from_millis(16));
         }
+
+        "Thread has ended"
     });
+
+    println!("{}", handle.join().unwrap());
 
     loop {
         println!("Hi from the main thread");
