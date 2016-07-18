@@ -126,17 +126,19 @@ impl Screen {
     }
 
     pub fn draw(&mut self) {
-        let color = {
-            let counter = *self.counter.read().unwrap();
-            // We read from the shared memory reference...
-            println!("Screen::draw read {} from shared counter", counter);
-            counter as u32
-        };
+        let counter = {*self.counter.read().unwrap()} as u32;
+        // This is a bit complicated - the reason we wrap the RwLock
+        // in {} is so that we stop holding the lock immediately after this read
+
+        // That means that the cpu can update the reference, and all the rest
+        // of the code in this function *may* actually be 'out of date'!
+        println!("Screen::draw read {} from shared counter", counter);
+
         // At this point, we should have dropped the read lock since the counter is out of scope!
 
         // update the buffer with some interesting color based on that read memory...
         for pixel in self.buffer.iter_mut() {
-            *pixel = color << 16 | (255-color) << 8 | color;
+            *pixel = counter << 16 | (255-counter) << 8 | counter;
         }
 
         self.window.update_with_buffer(&self.buffer);
