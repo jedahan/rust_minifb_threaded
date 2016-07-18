@@ -128,12 +128,20 @@ impl Screen {
     pub fn draw(&mut self) {
         let counter = *self.counter.read().unwrap();
         println!("Screen::draw read {} from shared counter", counter);
+        // We read from the shared memory reference...
+
         for pixel in self.buffer.iter_mut() {
+            // update the buffer with some interesting color based on that read memory...
             let color = counter as u32;
             *pixel = color << 16 | (255-color) << 8 | color;
         }
+
+        // and then tell minifb to update the drawn window
         self.window.update_with_buffer(&self.buffer);
     }
+
+    // similar to Cpu::run, we sleep for one millisecond and check if
+    // 16 milliseconds (~60 frames / second) have passed.
 
     pub fn run(&mut self) {
         println!("Screen::run");
@@ -146,7 +154,7 @@ impl Screen {
                 self.draw();
                 previous_draw = now;
             };
-            sleep(Duration::from_millis(2));
+            sleep(Duration::from_millis(1));
         }
     }
 }
