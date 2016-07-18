@@ -1,47 +1,92 @@
+/*
+ * This is my first time writing multithreaded code.
+ *
+ * It is a minimal example I was creating to figure
+ * out why my gameboy emulator ( http://github.com/jedahan/rustboy )
+ * was showing nothing when I started to go ham on multithreading.
+ *
+ * Any suggestions are greatly appreciated.
+ */
+
 extern crate minifb;
+use minifb::WindowOptions;
+
+/*
+ * minifb stands for mini framebuffer.
+ * Its a library created by emoon that makes it
+ * dirt simple to create a window, draw pixels,
+ * and interact with the keyboard and mouse on
+ * OSX, Linux, and Windows.
+ */
 
 use std::thread;
-use std::sync::{RwLock, Arc};
-use std::time::{Duration, Instant};
-use std::thread::sleep;
+use std::sync::{Arc, RwLock};
 
-use minifb::WindowOptions;
+/*
+ * For the gameboy emulator I was making, I wanted 2 threads:
+ *
+ *   A Cpu thread that could write to some shared memory,
+ *   and a Debug Screen thread that could read from that shared memory to draw an image of it
+ *
+ * We import thread to spawn a child thread, and introduce two interesting structs:
+ *
+ *   Arc: automatic reference count.
+ *
+ *     An Arc is a smart pointer that knows how many scopes have a reference to it
+ *     A RwLock, which makes sure we only have one mutable reference and that any
+ *     immutable access to shared memory between threads are not being mutated while being read
+ *
+ *  We will wrap the shared memory in an Arc<RwLock<>>,
+ *  for reasons that may become clearer later in the code
+ */
+
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+
+/*
+ * We import sleep and Duration and Instant so we are not going full speed on the real cpu.
+ *
+ * The general idea is to 'tick' the Cpu thread once every second, incrementing the counter,
+ * and to 'tick' the Debug screen thread at a buttery smooth 60 times per second.
+ */
 
 const WIDTH: usize = 288;
 const HEIGHT: usize = 160;
 
+/* The screen needs a height and width, dontchaknow? */
+
 struct Cpu {
     running: bool,
-    frame: Arc<RwLock<usize>>
+    counter: Arc<RwLock<usize>>
 }
 
 impl Cpu {
-    pub fn new(frame: Arc<RwLock<usize>>) -> Cpu {
+    pub fn new(counter: Arc<RwLock<usize>>) -> Cpu {
         Cpu {
             running: false,
-            frame: frame
+            counter: counter
         }
     }
 
     pub fn update(&mut self) {
         self.running = true;
-        let frame = *self.frame.read().unwrap();
-        let mut frame_handle = self.frame.write().unwrap();
+        let counter = *self.counter.read().unwrap();
+        let mut counter_handle = self.counter.write().unwrap();
 
-        *frame_handle = frame + 1;
-        println!("CPU updated frame to {}", *frame_handle);
+        *counter_handle = counter + 1;
+        println!("CPU updated counter to {}", *counter_handle);
     }
 
     pub fn run(&mut self) {
         println!("Cpu::run");
-        let frame_duration = Duration::from_millis(1000);
-        let mut previous_draw = Instant::now();
+        let cpu_tick_duration = Duration::from_millis(1000);
+        let mut previous_tick = Instant::now();
 
         loop {
             let now = Instant::now();
-            if now - previous_draw > frame_duration {
+            if now - previous_tick > cpu_tick_duration {
                 self.update();
-                previous_draw = now;
+                previous_tick = now;
             };
             sleep(Duration::from_millis(100));
         }
@@ -52,37 +97,37 @@ impl Cpu {
 struct Screen {
     window: minifb::Window,
     buffer: Vec<u32>,
-    frame: Arc<RwLock<usize>>
+    counter: Arc<RwLock<usize>>
 }
 
 impl Screen {
-    pub fn new(width: usize, height: usize, frame: Arc<RwLock<usize>>) -> Screen {
+    pub fn new(width: usize, height: usize, counter: Arc<RwLock<usize>>) -> Screen {
 
         Screen {
-            frame: frame,
+            counter: counter,
             buffer: vec![0; width * height],
             window: minifb::Window::new("debug", width, height, WindowOptions::default()).unwrap()
         }
     }
 
-    pub fn update(&mut self) {
-        let frame = *self.frame.read().unwrap();
-        println!("Hello from shared frame {}", frame);
+    pub fn draw(&mut self) {
+        let counter = *self.counter.read().unwrap();
+        println!("Screen::draw read {} from shared counter", counter);
         for i in self.buffer.iter_mut() {
-            *i = frame as u32;
+            *i = counter as u32;
         }
         self.window.update_with_buffer(&self.buffer);
     }
 
     pub fn run(&mut self) {
-        println!("DebugScreen::run");
+        println!("Screen::run");
         let frame_duration = Duration::from_millis(16);
         let mut previous_draw = Instant::now();
 
         loop {
             let now = Instant::now();
             if now - previous_draw > frame_duration {
-                self.update();
+                self.draw();
                 previous_draw = now;
             };
             sleep(Duration::from_millis(2));
@@ -91,18 +136,58 @@ impl Screen {
 }
 
 fn main() {
-    // what we move into the Cpu, for writing
-    let frame = Arc::new(RwLock::new(0));
+    let counter = Arc::new(RwLock::new(0));
+    /*
+     * counter is our bit of shared memory. Since it is small, maybe using channels
+     * would make more sense, but in the emulator I have a semi-complicated struct
+     * and would rather reference/dereference until I understand how channels work
+     * and if they are safer/just as fast.
+     */
 
-    let frame_ref = frame.clone();
+    let counter_ref = counter.clone();
+    /*
+     * This is the magic of Arc<> - it allows us to move the cloned, wrapped
+     * reference into the cpu thread later, safely.
+     *
+     * I think safely means in this case, we will not drop the counter
+     * until the clones get dropped, but I am not sure.
+     *
+     * The word drop means something very specific in rust - when a structs lifetime is
+     * over, it gets dropped. This is remotely similar to free() in C.
+     */
 
-    let mut screen = Screen::new(WIDTH, HEIGHT, frame);
+    let mut screen = Screen::new(WIDTH, HEIGHT, counter);
+
+    /*
+     *
+     * At first, it made more sense to have the Cpu be in the main thread, but
+     * OSX is very picky about doing graphics stuff in a child thread [3]
+     *
+     * So our main thread will be a screen, and we pass it along the first counter reference.
+     */
 
     let _ = thread::spawn(move || {
+        /*
+         * thread::spawn is how you make a thread, which we pass in a function
+         * move tells the function to automatically move ownership of any referenced variables
+         * to inside the thread. In this case, it should just move counter_ref
+         *
+         * This is still a bit hazy for me, but it seems to work well.
+         */
         println!("Hello from child (cpu) thread");
-        let mut cpu = Cpu::new(frame_ref);
+        let mut cpu = Cpu::new(counter_ref);
+        // we pass along our cloned Arc<> counter_ref into the cpu, which will update it later
         cpu.run();
     });
 
     screen.run();
+    /*
+     * At this point, we have both the screen and cpu running in parallel
+     * and safely accessing the counter!
+     */
 }
+
+/*
+ * [3]: I spent a few days of time (over a few weeks) to make this minimal example and track this down.
+ *      If you are interested, theres some talk about it here https://github.com/emoon/rust_minifb/issues/21
+ */
