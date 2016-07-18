@@ -126,18 +126,21 @@ impl Screen {
     }
 
     pub fn draw(&mut self) {
-        let counter = *self.counter.read().unwrap();
-        println!("Screen::draw read {} from shared counter", counter);
-        // We read from the shared memory reference...
+        let color = {
+            let counter = *self.counter.read().unwrap();
+            // We read from the shared memory reference...
+            println!("Screen::draw read {} from shared counter", counter);
+            counter as u32
+        };
+        // At this point, we should have dropped the read lock since the counter is out of scope!
 
+        // update the buffer with some interesting color based on that read memory...
         for pixel in self.buffer.iter_mut() {
-            // update the buffer with some interesting color based on that read memory...
-            let color = counter as u32;
             *pixel = color << 16 | (255-color) << 8 | color;
         }
 
-        // and then tell minifb to update the drawn window
         self.window.update_with_buffer(&self.buffer);
+        // and then tell the minifb window to draw the contents
     }
 
     // similar to Cpu::run, we sleep for one millisecond and check if
