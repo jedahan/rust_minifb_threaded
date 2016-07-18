@@ -90,12 +90,12 @@ impl Cpu {
         println!("CPU updated counter to {}", *counter_reference);
     }
 
-    // For run(), we will sleep for ten milliseconds at a time and check if a
-    // full second has passed. I don't know much about timers, so I guess this
-    // means we can be up to 9 ms out of sync when we run Cpu::update
+    // For run(), we will sleep for 1 millisecond at a time and check if 100
+    // milliseconds have passed. I don't know much about timers, so I guess this
+    // means we can be up to 1 ms out of sync when we run Cpu::update
     pub fn run(&mut self) {
         println!("Cpu::run");
-        let cpu_tick_duration = Duration::from_millis(1000);
+        let cpu_tick_duration = Duration::from_millis(100);
         let mut previous_tick = Instant::now();
 
         loop {
@@ -104,7 +104,7 @@ impl Cpu {
                 self.update();
                 previous_tick = now;
             };
-            sleep(Duration::from_millis(10));
+            sleep(Duration::from_millis(1));
         }
     }
 }
@@ -128,8 +128,9 @@ impl Screen {
     pub fn draw(&mut self) {
         let counter = *self.counter.read().unwrap();
         println!("Screen::draw read {} from shared counter", counter);
-        for i in self.buffer.iter_mut() {
-            *i = counter as u32;
+        for pixel in self.buffer.iter_mut() {
+            let color = counter as u32;
+            *pixel = color << 16 | (255-color) << 8 | color;
         }
         self.window.update_with_buffer(&self.buffer);
     }
